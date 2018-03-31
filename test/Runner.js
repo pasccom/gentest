@@ -2,7 +2,7 @@
 
 var assert = require('assert');
 
-var Runner = require('../lib/Runner');
+var Runner = require('../bin/Runner');
 var Property = require('../lib/Property');
 var t = require('../lib/types');
 

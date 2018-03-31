@@ -7,7 +7,7 @@ var path = require('path');
 var program = require('commander');
 
 var Property = require('../lib/Property');
-var Runner = require('../lib/Runner');
+var Runner = require('Runner');
 
 var write = process.stderr.write.bind(process.stderr);
 var version = JSON.parse(fs.readFileSync(__dirname + '/../package.json',
