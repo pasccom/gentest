@@ -23,31 +23,37 @@ function gentest(it) {
         
         // Genetive testing function (the function called by the spec):
         function genFun() {
-            var result; // TODO there may be a problem here (multiple expectations)
+            var results; // Array of (failed and passed) expectations results
 
             // Wrapper around fun to comply with generative testing (the function called by generative tester):
             var testFun = function() {
+                results = [];
                 try {
                     fun.apply(null, arguments);
                 } catch (e) {
                     if (!(e instanceof jasmine.errors.ExpectationFailed))
-                        result = {
+                        results.push({
                             matcherName: '',
                             passed: false,
                             expected: '',
                             actual: '',
                             error: e,
                             message: e.toString() + ' (' + e.fileName + ' at ' + e.lineNumber + ':' + e.columnNumber + ').',
-                        };
+                        });
                     throw e;
                 }
-                return result.passed;
+                return results.map((r) => r.passed).reduce((a, p) => a && p, true);
             };
 
             // Alter spec so that expectations are added only after generative testing is done
             // and exceptions in this function yield a spec failure
             var specAddExpectationResult = genSpec.addExpectationResult.bind(genSpec);
             genSpec.onException = function(e) {
+                // Add expectation results to spec:
+                results.forEach(function(r) {
+                    specAddExpectationResult(r.passed, r, r.error === undefined);
+                });
+                // Add GenTest error to spec:
                 specAddExpectationResult(false, {
                     matcherName: '',
                     passed: false,
@@ -58,7 +64,7 @@ function gentest(it) {
                 }, true);
             };
             genSpec.addExpectationResult = function(passed, data, isError) {
-                result = data;
+                results.push(data);
 
                 if (genSpec.throwOnExpectationFailure && !passed && !isError)
                     throw new jasmine.errors.ExpectationFailed();
@@ -71,20 +77,21 @@ function gentest(it) {
             // TODO Should be options:
             var maxSize = 100;
             var numTests = 10;
+            var ans;
             
             // Run generative testing tests
             for (k = 0; k < numTests; k++) {
                 testCase = prop.genTest(rng, maxSize * (k + 1) / numTests);
-                prop.runTest(testCase);
+                ans = prop.runTest(testCase);
                 
-                if (result.passed === false)
+                if (!ans.success)
                     break;
             }
             
             // Shrink failing testcase
-            if (result.passed === false) { // TODO Enable/disable shriking by option
+            if (!ans.success) { // TODO Enable/disable shriking by option
                 var iter = prop.shrinkFailingTest(testCase); // Test case tree iterator
-                var lastFailedResult = result;               // Result of last failed expectation
+                var lastFailedResults = results;             // Result of last failed expectation
 
                 // GC unused branches of the tree
                 testCase = null;
@@ -98,21 +105,25 @@ function gentest(it) {
                     var value = ret.value;
                     numAttempts++;
                     if (!value.result.success) {
-                        if (result.message)
-                            result.message = result.message + ' Arguments: (' + value.testArgs + ')';
-                        lastFailedResult = result;
+                        results.forEach(function(r) {
+                            if (!r.passed && r.message)
+                                r.message = r.message + ' Arguments: (' + value.testArgs + ')';
+                        });
+                        lastFailedResults = results;
                         numShrinks++;
                     }
                     console.log('Shrinking ' + numShrinks + '/' + numAttempts);
                     ret = iter.next();
                 }
                 
-                // Put last failed expectation in test result
-                result = lastFailedResult;
+                // Put expectation results of last failed case in test results
+                results = lastFailedResults;
             }
             
-            // Add test result to spec
-            specAddExpectationResult(result.passed, result, result.error === undefined);
+            // Add test results to spec
+            results.forEach(function(r) {
+                specAddExpectationResult(r.passed, r, r.error === undefined);
+            });
         }
     }
 }
