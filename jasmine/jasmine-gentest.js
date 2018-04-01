@@ -30,14 +30,15 @@ function gentest(it) {
                 try {
                     fun.apply(null, arguments);
                 } catch (e) {
-                    result = {
-                        matcherName: '',
-                        passed: false,
-                        expected: '',
-                        actual: '',
-                        error: e,
-                        message: e.toString() + ' (' + e.fileName + ' at ' + e.lineNumber + ':' + e.columnNumber + ').',
-                    };
+                    if (!(e instanceof jasmine.errors.ExpectationFailed))
+                        result = {
+                            matcherName: '',
+                            passed: false,
+                            expected: '',
+                            actual: '',
+                            error: e,
+                            message: e.toString() + ' (' + e.fileName + ' at ' + e.lineNumber + ':' + e.columnNumber + ').',
+                        };
                     throw e;
                 }
                 return result.passed;
@@ -58,6 +59,9 @@ function gentest(it) {
             };
             genSpec.addExpectationResult = function(passed, data, isError) {
                 result = data;
+
+                if (genSpec.throwOnExpectationFailure && !passed && !isError)
+                    throw new jasmine.errors.ExpectationFailed();
             };
             
             // The property to test and the current test case:
