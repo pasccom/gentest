@@ -54,7 +54,7 @@ function gentest(it) {
                     expected: '',
                     actual: '',
                     error: e,
-                    message: e.toString() + ' (' + e.fileName + ' at ' + e.lineNumber + ':' + e.columnNumber + ').',
+                    message: 'GenTest Error: ' + e.toString() + ' (' + e.fileName + ' at ' + e.lineNumber + ':' + e.columnNumber + ').',
                 }, true);
             };
             genSpec.addExpectationResult = function(passed, data, isError) {
@@ -63,7 +63,7 @@ function gentest(it) {
                 if (genSpec.throwOnExpectationFailure && !passed && !isError)
                     throw new jasmine.errors.ExpectationFailed();
             };
-            
+
             // The property to test and the current test case:
             var prop = new Property(testFun, genDesc, Array.isArray(genTypes) ? types.tuple(genTypes) : genTypes);
             var testCase;
