@@ -33,7 +33,7 @@ GenTest.wrap = function(it) {
 
         // Genetive testing function (the function called by the spec):
         function genFun() {
-            var results; // Array of (failed and passed) expectations results
+            var results = []; // Array of (failed and passed) expectations results
 
             // Wrapper around fun to comply with generative testing (the function called by generative tester):
             var testFun = function() {
@@ -81,7 +81,7 @@ GenTest.wrap = function(it) {
             };
 
             // The property to test and the current test case:
-            var prop = new Property(testFun, genDesc, Array.isArray(genTypes) ? types.tuple(genTypes) : genTypes);
+            var prop = new GenTest.Property(testFun, genDesc, Array.isArray(genTypes) ? GenTest.types.tuple(genTypes) : genTypes);
 
             // Run generative testing tests
             var testCase;
