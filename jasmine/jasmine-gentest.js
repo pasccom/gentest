@@ -1,5 +1,15 @@
+var GenTest = {};
+
+// GenTest options
+GenTest.options = {
+    maxSize:           100,
+    numTests:           10,
+    shriking:         true,
+    maxShrinkAttempts: 100,
+};
+
 // Wrap generative tester into spec:
-function gentest(it) {
+GenTest.wrap = function(it) {
     // The new spec function (takes two or three arguments):
     return function(/* desc, [types,] fun*/) {
         // If two arguments are passed, call original function
@@ -20,7 +30,7 @@ function gentest(it) {
         var genTypes = arguments[1];
         var genSpec = it(genDesc, genFun);
         return genSpec;
-        
+
         // Genetive testing function (the function called by the spec):
         function genFun() {
             var results; // Array of (failed and passed) expectations results
@@ -72,36 +82,32 @@ function gentest(it) {
 
             // The property to test and the current test case:
             var prop = new Property(testFun, genDesc, Array.isArray(genTypes) ? types.tuple(genTypes) : genTypes);
-            var testCase;
 
-            // TODO Should be options:
-            var maxSize = 100;
-            var numTests = 10;
-            var ans;
-            
             // Run generative testing tests
-            for (k = 0; k < numTests; k++) {
-                testCase = prop.genTest(rng, maxSize * (k + 1) / numTests);
+            var testCase;
+            var ans;
+            for (k = 0; k < GenTest.options.numTests; k++) {
+                testCase = prop.genTest(rng, GenTest.options.maxSize * (k + 1) / GenTest.options.numTests);
                 ans = prop.runTest(testCase);
-                
+
                 if (!ans.success)
                     break;
             }
-            
+
             // Shrink failing testcase
-            if (!ans.success) { // TODO Enable/disable shriking by option
+            if (!ans.success && GenTest.options.shriking) {
                 var iter = prop.shrinkFailingTest(testCase); // Test case tree iterator
                 var lastFailedResults = results;             // Result of last failed expectation
 
                 // GC unused branches of the tree
                 testCase = null;
-                
-                var numAttempts = 0; // Number of tries done   // TODO max attempts in option
+
+                var numAttempts = 0; // Number of tries done
                 var numShrinks = 0;  // Number of shrinks done
 
                 // Test case tree shriking
                 var ret = iter.next();
-                while (!ret.done) {
+                while ((numAttempts < GenTest.options.maxShrinkAttempts) && !ret.done) {
                     var value = ret.value;
                     numAttempts++;
                     if (!value.result.success) {
@@ -115,11 +121,11 @@ function gentest(it) {
                     console.log('Shrinking ' + numShrinks + '/' + numAttempts);
                     ret = iter.next();
                 }
-                
+
                 // Put expectation results of last failed case in test results
                 results = lastFailedResults;
             }
-            
+
             // Add test results to spec
             results.forEach(function(r) {
                 specAddExpectationResult(r.passed, r, r.error === undefined);
@@ -133,8 +139,8 @@ if (!describe)
 
 // Wrap generative testing in it, fit and xit:
 if (it)
-    it = gentest(it);
+    it = GenTest.wrap(it);
 if (fit)
-    fit = gentest(fit);
+    fit = GenTest.wrap(fit);
 if (xit)
-    xit = gentest(xit);
+    xit = GenTest.wrap(xit);
