@@ -1,3 +1,5 @@
+"use strict";
+
 var GenTest = {};
 
 // GenTest options
@@ -86,7 +88,7 @@ GenTest.wrap = function(it) {
             // Run generative testing tests
             var testCase;
             var ans;
-            for (k = 0; k < GenTest.options.numTests; k++) {
+            for (var k = 0; k < GenTest.options.numTests; k++) {
                 testCase = prop.genTest(rng, GenTest.options.maxSize * (k + 1) / GenTest.options.numTests);
                 ans = prop.runTest(testCase);
 
