@@ -152,12 +152,7 @@ GenTest.wrap = function(it) {
                 } else {
                     var iter = prop.shrinkFailingTest(testCase); // Test case tree iterator
                     var lastFailedResults = results;             // Result of last failed expectation
-
-                    // GC unused branches of the tree
-                    testCase = null;
-
-                    var numAttempts = 0; // Number of tries done    // TODO numAttempts -> Property
-                    var numShrinks = 0;  // Number of shrinks done  // TODO numShrinks -> Property
+                    testCase = null;                             // GC unused branches of the tree
 
                     var checkResult = function(success, testArgs) {
                         if (!success) {
@@ -167,7 +162,6 @@ GenTest.wrap = function(it) {
                             });
 
                             lastFailedResults = results;
-                            numShrinks++;
                         }
 
                         next();
@@ -175,11 +169,10 @@ GenTest.wrap = function(it) {
 
                     var next = function() {
                         var ret = iter.next();
-                        if (!ret.done && (numAttempts++ < GenTest.options.maxShrinkAttempts)) {
-                            console.log('Shrinking ' + numShrinks + '/' + numAttempts);
+                        if (!ret.done) {
                             ret.value(checkResult);
                         } else {
-                            console.log('Done ' + numShrinks + '/' + numAttempts);
+                            console.log('Done: ' + ret.reason);
                             cleanup(false, lastFailedResults);
                         }
                     };
