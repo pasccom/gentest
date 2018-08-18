@@ -148,16 +148,21 @@ GenTest.wrap = function(it) {
             }, function() {
                 // Failure (shrink testcase if asked)
                 if (!GenTest.options.shriking) {
+                    results.forEach(function(r) {
+                        if (!r.passed && r.message)
+                            r.message = r.message + ' (Arguments: ' + jasmine.pp(prop.testCase.root) + ')';
+                    });
+
                     cleanup(false, results);
                 } else {
                     var iter = prop.shrinkTest();    // Test case tree iterator
                     var lastFailedResults = results; // Result of last failed expectation
 
-                    var checkResult = function(success, testArgs) {
+                    var checkResult = function(success) {
                         if (!success) {
                             results.forEach(function(r) {
                                 if (!r.passed && r.message)
-                                    r.message = r.message + ' Arguments: (' + testArgs + ')';
+                                    r.message = r.message + ' (Arguments: ' + jasmine.pp(prop.testCase.root) + ')';
                             });
 
                             lastFailedResults = results;
