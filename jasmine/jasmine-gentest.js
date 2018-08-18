@@ -19,13 +19,6 @@ GenTest.wrap = function(it) {
             return it(arguments[0], arguments[1]);
         }
 
-        // Basic random number generator:
-        var rng = {
-            float: function() {
-                return Math.random();
-            }
-        };
-
         // Saves arguments into variables and create generative testing spec:
         var fun = arguments[2];
         var genDesc = arguments[0];
@@ -33,40 +26,17 @@ GenTest.wrap = function(it) {
         var genSpec = it(genDesc, genFun);
         return genSpec;
 
-        // Genetive testing function (the function called by the spec):
-        function genFun() {
-            var results = []; // Array of (failed and passed) expectations results
-
-            // Wrapper around fun to comply with generative testing (the function called by generative tester):
-            var testFun = function() {
-                results = [];
-                try {
-                    fun.apply(null, arguments);
-                } catch (e) {
-                    if (!(e instanceof jasmine.errors.ExpectationFailed))
-                        results.push({
-                            matcherName: '',
-                            passed: false,
-                            expected: '',
-                            actual: '',
-                            error: e,
-                            message: e.toString() + ' (' + e.fileName + ' at ' + e.lineNumber + ':' + e.columnNumber + ').',
-                        });
-                    throw e;
-                }
-                return results.map((r) => r.passed).reduce((a, p) => a && p, true);
-            };
-
+        // Generative testing function (the function called by the spec):
+        // @params jasmineDone This function should be called when we are done running the tests.
+        function genFun(jasmineDone) {
             // Alter spec so that expectations are added only after generative testing is done
             // and exceptions in this function yield a spec failure
-            var specAddExpectationResult = genSpec.addExpectationResult.bind(genSpec);
+            var specAddExpectationResult = genSpec.addExpectationResult;
+            var specOnExpection = genSpec.onException;
+
             genSpec.onException = function(e) {
-                // Add expectation results to spec:
-                results.forEach(function(r) {
-                    specAddExpectationResult(r.passed, r, r.error === undefined);
-                });
                 // Add GenTest error to spec:
-                specAddExpectationResult(false, {
+                genSpec.addExpectationResult(false, {
                     matcherName: '',
                     passed: false,
                     expected: '',
@@ -82,58 +52,142 @@ GenTest.wrap = function(it) {
                     throw new jasmine.errors.ExpectationFailed();
             };
 
+            var results = []; // Array of (failed and passed) expectations results
+            function saveResults() {
+                var currentResults = arguments.length < 1 ? results : arguments[0];
+
+                currentResults.forEach((r) => {
+                    specAddExpectationResult.call(genSpec, r.passed, r, r.error === undefined);
+                });
+            }
+
+            // Wrapper around fun to comply with generative testing (the function called by generative tester):
+            // @param ...args Arguments to be passed to the test function
+            // @param genTestDone function to be called when test is finished
+            var testFun = function() {
+                var args = Array.prototype.slice.call(arguments, 0, arguments.length - 1);
+                var genTestDone = arguments[arguments.length - 1];
+
+                var done = false;
+                var checkResults = function() {
+                    if (done)
+                        return;
+                    done = true;
+
+                    if (results.map((r) => r.passed).reduce((a, p) => a && p, true))
+                        genTestDone();
+                    else
+                        genTestDone.fail();
+                };
+                checkResults.fail = function(error) {
+                    if (done)
+                        console.warn('This function should be called only once');
+                    done = true;
+
+                    var msg = 'Failed';
+                    if (error) {
+                        msg += ': ';
+                        if (error.message)
+                            msg += error.message;
+                        else
+                            msg += jasmine.pp(error);
+                    }
+
+                    genSpec.addExpectationResult(false, {
+                        matcherName: '',
+                        passed: false,
+                        expected: '',
+                        actual: '',
+                        message: msg,
+                        error: error && error.message ? error : null
+                    }, error && error.message);
+
+                    genTestDone.fail();
+                };
+
+                results = [];
+
+                try {
+                    if (fun.length == args.length) {
+                        var maybePromise = fun.apply(null, args);
+                        if (maybePromise && (Object.prototype.toString.apply(maybePromise.then) == '[object Function]'))
+                            maybePromise.then(checkResults, checkResults.fail);
+                        else
+                            checkResults();
+                    } else {
+                        fun.apply(null, args.concat(checkResults));
+                    }
+                } catch (e) {
+                    if (!(e instanceof jasmine.errors.ExpectationFailed))
+                        results.push({
+                            matcherName: '',
+                            passed: false,
+                            expected: '',
+                            actual: '',
+                            error: e,
+                            message: e.toString() + ' (' + e.fileName + ' at ' + e.lineNumber + ':' + e.columnNumber + ').',
+                        });
+                    checkResults.fail(e);
+                }
+            };
+
+            // Cleanup when all tests are done:
+            var cleanup = function(success, results) {
+                saveResults(results);
+                if (success)
+                    jasmineDone();
+                else
+                    jasmineDone.fail();
+            };
+
             // The property to test and the current test case:
             var prop = new GenTest.Property(testFun, genDesc, Array.isArray(genTypes) ? GenTest.types.tuple(genTypes) : genTypes);
+            prop.runTests(function() {
+                // Success
+                cleanup(true, results);
+            }, function(testCase) { // TODO testCase -> props
+                // Failure (shrink testcase if asked)
+                if (!GenTest.options.shriking) {
+                    cleanup(false, results);
+                } else {
+                    var iter = prop.shrinkFailingTest(testCase); // Test case tree iterator
+                    var lastFailedResults = results;             // Result of last failed expectation
 
-            // Run generative testing tests
-            var testCase;
-            var ans;
-            for (var k = 0; k < GenTest.options.numTests; k++) {
-                testCase = prop.genTest(rng, GenTest.options.maxSize * (k + 1) / GenTest.options.numTests);
-                ans = prop.runTest(testCase);
+                    // GC unused branches of the tree
+                    testCase = null;
 
-                if (!ans.success)
-                    break;
-            }
+                    var numAttempts = 0; // Number of tries done    // TODO numAttempts -> Property
+                    var numShrinks = 0;  // Number of shrinks done  // TODO numShrinks -> Property
 
-            // Shrink failing testcase
-            if (!ans.success && GenTest.options.shriking) {
-                var iter = prop.shrinkFailingTest(testCase); // Test case tree iterator
-                var lastFailedResults = results;             // Result of last failed expectation
+                    var checkResult = function(success, testArgs) {
+                        if (!success) {
+                            results.forEach(function(r) {
+                                if (!r.passed && r.message)
+                                    r.message = r.message + ' Arguments: (' + testArgs + ')';
+                            });
 
-                // GC unused branches of the tree
-                testCase = null;
+                            lastFailedResults = results;
+                            numShrinks++;
+                        }
 
-                var numAttempts = 0; // Number of tries done
-                var numShrinks = 0;  // Number of shrinks done
+                        next();
+                    };
 
-                // Test case tree shriking
-                var ret = iter.next();
-                while ((numAttempts < GenTest.options.maxShrinkAttempts) && !ret.done) {
-                    var value = ret.value;
-                    numAttempts++;
-                    if (!value.result.success) {
-                        results.forEach(function(r) {
-                            if (!r.passed && r.message)
-                                r.message = r.message + ' Arguments: (' + value.testArgs + ')';
-                        });
-                        lastFailedResults = results;
-                        numShrinks++;
-                    }
-                    console.log('Shrinking ' + numShrinks + '/' + numAttempts);
-                    ret = iter.next();
+                    var next = function() {
+                        var ret = iter.next();
+                        if (!ret.done && (numAttempts++ < GenTest.options.maxShrinkAttempts)) {
+                            console.log('Shrinking ' + numShrinks + '/' + numAttempts);
+                            ret.value(checkResult);
+                        } else {
+                            console.log('Done ' + numShrinks + '/' + numAttempts);
+                            cleanup(false, lastFailedResults);
+                        }
+                    };
+                    next();
                 }
-
-                // Put expectation results of last failed case in test results
-                results = lastFailedResults;
-            }
-
-            // Add test results to spec
-            results.forEach(function(r) {
-                specAddExpectationResult(r.passed, r, r.error === undefined);
             });
         }
-    }
+    };
 }
 
 if (!describe)
