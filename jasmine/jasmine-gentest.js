@@ -145,14 +145,13 @@ GenTest.wrap = function(it) {
             prop.runTests(function() {
                 // Success
                 cleanup(true, results);
-            }, function(testCase) { // TODO testCase -> props
+            }, function() {
                 // Failure (shrink testcase if asked)
                 if (!GenTest.options.shriking) {
                     cleanup(false, results);
                 } else {
-                    var iter = prop.shrinkFailingTest(testCase); // Test case tree iterator
-                    var lastFailedResults = results;             // Result of last failed expectation
-                    testCase = null;                             // GC unused branches of the tree
+                    var iter = prop.shrinkTest();    // Test case tree iterator
+                    var lastFailedResults = results; // Result of last failed expectation
 
                     var checkResult = function(success, testArgs) {
                         if (!success) {
